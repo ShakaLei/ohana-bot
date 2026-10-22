@@ -1,0 +1,1324 @@
+// ======================================================================
+// ʻOHANA BOT — virtual assembly model.  units = centimetres.
+// one robot body, six ʻohana agents, Huaqiangbei parts.
+// ======================================================================
+const $ = s => document.querySelector(s);
+const clamp = (v,a,b) => v<a?a:(v>b?b:v);
+const lerp = (a,b,t) => a+(b-a)*t;
+const smooth = t => { t=clamp(t,0,1); return t*t*(3-2*t); };
+const smoother = t => { t=clamp(t,0,1); return t*t*t*(t*(t*6-15)+10); };
+
+const HIGH = window.innerWidth > 760 && !/Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
+
+// ----------------------------------------------------------------- personas
+const FACES = [ // bottom -> top, exactly the HARDWARE.md pixel map
+  {k:'oke',  em:'💙', nm:'OKE',   zh:'OKE 卡拉OK',   job:'karaoke finale',        zhJob:'卡拉OK 合唱',   px:'0–11',  col:0x4fc3f7, gpio:21,
+   line:"Pick your key — I'll follow you.",  zhLine:'挑个调，我跟着你唱。'},
+  {k:'kala', em:'🪕', nm:'KALA',  zh:'KALA 尤克里里', job:'teaches 3 uke chords',  zhJob:'教三个和弦',    px:'12–23', col:0xf7d794, gpio:26,
+   line:"Three chords and you're playing: C, F, G.", zhLine:'三个和弦就能弹：C、F、G。'},
+  {k:'crops',em:'🌿', nm:'CROPS', zh:'CROPS 守护者',  job:'the ETH mandate, line by line', zhJob:'逐行讲解宣言', px:'24–35', col:0x2f9e6f, gpio:19,
+   line:"Let's read the mandate, line by line.", zhLine:'我们一行一行地读这份宣言。'},
+  {k:'deva', em:'🦄', nm:'DEVA',  zh:'DEVA 独角兽',   job:'the Devcon oracle',     zhJob:'Devcon 预言者',  px:'36–47', col:0xc792ea, gpio:13,
+   line:'Devcon is where the builders gather.', zhLine:'Devcon 是建设者相聚的地方。'},
+  {k:'oso',  em:'🎻', nm:'OSO',   zh:'OSO 开源乐团',  job:'34 artists, one schedule', zhJob:'34位艺术家的日程', px:'48–59', col:0xff7eb6, gpio:6,
+   line:'Thirty-four artists, one open orchestra.', zhLine:'三十四位艺术家，一支开源乐团。'},
+  {k:'shaka',em:'🤙', nm:'SHAKA', zh:'SHAKA 主持人',  job:'the host · his twin',   zhJob:'主持人 · 他的数字分身', px:'60–71', col:0xffb443, gpio:5,
+   line:"Aloha! I'm the host — ask me anything.", zhLine:'阿罗哈！我是主持人，随便问。'}
+];
+const YAW = [-0.34, 0.21, -0.13, 0.29, -0.24, 0.05];
+
+// ----------------------------------------------------------------- groups
+const GROUPS = [
+  {k:'shell', em:'🗿', en:'shell',  zh:'外壳'},
+  {k:'brain', em:'🧠', en:'brain',  zh:'大脑'},
+  {k:'glow',  em:'✨', en:'glow',   zh:'灯光'},
+  {k:'touch', em:'👆', en:'touch',  zh:'触摸'},
+  {k:'ears',  em:'🎤', en:'ears',   zh:'耳朵'},
+  {k:'voice', em:'🔊', en:'voice',  zh:'嘴巴'},
+  {k:'power', em:'🔋', en:'power',  zh:'电源'},
+  {k:'motion',em:'🦾', en:'motion', zh:'转动'}
+];
+const gOn = {}; GROUPS.forEach(g=>gOn[g.k]=true);
+
+// ----------------------------------------------------------------- part metadata
+const META = {
+  base:{em:'🗿', en:'Base disc + sisal wrap', zh:'底座 + 剑麻绳', g:'shell', y:[40,70], bom:1,
+    note:'Weight at the bottom so the totem never tips, and the tiki silhouette that makes people walk over. The servo bolts here; the power bank and speaker live inside.',
+    zhNote:'底座：配重防倒 + 图腾造型。舵机固定在这里，充电宝和音箱装在里面。'},
+  servo:{em:'🦾', en:'MG996R servo + bracket', zh:'MG996R 舵机 + 支架', g:'motion', y:[35,55], bom:1, pin:'GPIO 12 (PWM1) · own 5V ≥2A rail · common ground',
+    note:'Slow ±30° pan toward whoever is speaking. Pure charisma, zero demo dependency — CUT FIRST if over budget.',
+    zhNote:'缓慢转向说话的人（±30°）。只是加分项，预算不够第一个砍。'},
+  spine:{em:'🪵', en:'PVC tube spine Ø10cm × 40cm', zh:'PVC 管 直径10cm 长40cm', g:'shell', y:[10,30], bom:1,
+    note:'The body. Everything straps to this core and every cable runs up the channel inside it: LED data + 5V, six touch wires, the mic USB.',
+    zhNote:'图腾的身体。所有零件都绑在这根管子上，线从管内走：灯带数据+5V、六根触摸线、麦克风USB。'},
+  rope:{em:'🪢', en:'Sisal rope wrap 10m', zh:'剑麻绳 10米', g:'shell', y:null, bom:0,
+    note:'Wraps the spine. This is the part that makes it read as a totem instead of a pipe — part of the cut-order law: the shell can get simpler, it can never stop looking like a totem.',
+    zhNote:'缠绕管身。有了它才像图腾，而不是一根水管。'},
+  pi:{em:'🧠', en:'Raspberry Pi 5 8GB (or used Pi 4B 4GB)', zh:'树莓派 5 8GB（或二手 4B 4GB）', g:'brain', y:[250,780], bom:1, pin:'runs router.py · systemd auto-start · cold boot to demo state <40s',
+    note:'Runs router.py: wake-word → STT → persona LLM → TTS. A used Pi 4B (¥250–350) runs the whole stack — the heavy models are API-side; a new Pi 5 (¥650–780) is nicer, not necessary. Beware on JD: a "Raspberry Pi Pico / RP2040" kit is a microcontroller and cannot run any of this.',
+    zhNote:'运行 router.py：唤醒词 → 语音识别 → 人格大模型 → 语音合成。二手 4B 够用。'},
+  sd:{em:'💾', en:'MicroSD 32GB ×2', zh:'MicroSD 卡 32GB ×2', g:'brain', y:[50,70], bom:1,
+    note:'One runs, one is the cloned backup holding memory.json — the file that lets the totem survive the power-cycle demo and still greet the judge by name.',
+    zhNote:'一张在跑，一张是克隆备份（含 memory.json）——断电重启后还记得评委的名字。'},
+  ledstrip:{em:'✨', en:'WS2812B 72 px chain (2×1m, 60/m)', zh:'WS2812B 灯带 72灯（2×1米）', g:'glow', y:[30,60], bom:1, pin:'data GPIO 18 (PWM0) · 72px ≈ 2A at our 50% brightness cap',
+    note:'The six faces. One addressable chain, ONE data wire, 12 px per face. Highest charisma per yuan in the whole build. One 60-LED metre is 12 px short — ×2 is required maths, not a spare.',
+    zhNote:'六张脸全靠这一条灯带：一根数据线，每张脸12颗，共72颗。一米60颗不够，必须买两米。'},
+  shifter:{em:'🔌', en:'74AHCT125 level shifter + 330Ω + 1000µF', zh:'电平转换 + 电阻 + 电容', g:'glow', y:[10,25], bom:1, pin:'3.3V data → 5V · 330Ω in series · 1000µF across 5V/GND at injection',
+    note:"The strip's unglamorous companions. Without the shifter the glow flickers on stage; without the cap the Pi browns out when all six faces come up at once.",
+    zhNote:'灯带的三个配角：没有电平转换，灯会闪；没有电容，派会掉电。'},
+  mic:{em:'🎤', en:'USB omni conference mic (top)', zh:'USB 全向会议麦克风（顶部）', g:'ears', y:[40,130], bom:1, pin:'USB · wake-word gated, never raw room audio',
+    note:'The ears, at the top, ≥20cm above the speaker to limit echo. Gated by wake word or tap — it is never always-listening. That is a rule, not a setting.',
+    zhNote:'耳朵装在顶部，离音箱≥20cm。只在唤醒词或触摸后才听，绝不一直监听。'},
+  mute:{em:'🛑', en:'Rocker mute switch', zh:'船型开关（物理静音）', g:'ears', y:[5,10], bom:1,
+    note:'THE PHYSICAL MUTE — kill switch #1, inline on the mic lead. Software stops take seconds; this takes zero. Mounted where a stranger can reach it, and labelled.',
+    zhNote:'物理静音开关 = 第一道断路器，直接串在麦克风线上。软件要几秒，开关是零秒。'},
+  speaker:{em:'🔊', en:'USB speaker 3–5W', zh:'USB 小音箱 3–5W', g:'voice', y:[25,50], bom:1,
+    note:'The mouth. Fires out of the BASE, not up the pole, and must fill a corner of a demo hall. Mechanically decoupled from the mic with a foam pad — we half-duplex instead of doing echo cancellation.',
+    zhNote:'嘴巴，朝底座外发声（不是朝上）。和麦克风用泡棉隔开，靠半双工避免回声。'},
+  bank:{em:'🔋', en:'PD power bank 20,000mAh', zh:'PD 充电宝 20000mAh', g:'power', y:[0,150], bom:1, pin:'port 1 → Pi (USB-C PD ≥27W) · port 2 → LED 5V rail',
+    note:"Untethered demo and immunity to venue power weirdness. The LEDs feed from the second port — never through the Pi's 5V pin. Check your own bank first; this may cost ¥0.",
+    zhNote:'无线演示 + 不怕场地电源。灯带从第二个口取电，绝不从派的5V脚取。先看看自己的充电宝够不够。'},
+  psu:{em:'🔌', en:'Official USB-C PSU (27W Pi5 / 15W Pi4)', zh:'官方电源 USB-C 27W（派5）或 15W（派4）', g:'power', y:[35,60], bom:1, pin:'wall power for the bench · the power bank takes over on stage',
+    note:"Don't skimp here: a cheap PSU browns out the moment all six faces light and the speaker hits a peak, and a brown-out mid-demo looks exactly like a crash. Official brick on the bench for three days of building; the power bank only comes out for the untethered demo.",
+    zhNote:'别省这个钱：便宜电源在六张脸同时亮+音箱出声时会掉压，演示时掉压看起来就像死机。三天搭建用原装电源，上台才换充电宝。'},
+  wires:{em:'🧵', en:'Dupont wires + breadboard', zh:'杜邦线 + 面包板', g:'power', y:[15,25], bom:1,
+    note:'Everything connects with these. Sharpie law: label BOTH ends of every wire with the face emoji — at 2am on day three you will not remember which touch wire is KALA.',
+    zhNote:'所有连接都靠它。规矩：每根线两头都用马克笔写上对应的脸，第三天凌晨你不会记得哪根是 KALA。'}
+};
+FACES.forEach((f,i)=>{
+  META['face'+(i+1)] = {em:f.em, en:'Translucent face plate · '+f.nm, zh:'半透明脸面板 · '+f.zh, g:'shell', y:[20,45], bom:(i===0?1:0),
+    note:'Frosted acrylic / PP, ~2mm. Without translucency the LEDs are just dots behind a wall; with it, the face comes alive. Removable (velcro/magnets) so the ring and the pad stay serviceable.'
+      + (i===0?' ¥20–45 buys the A4 sheet set for all six.':' Cut from the same A4 sheet set (counted once in the BOM).'),
+    zhNote:'半透明亚克力/PP磨砂板，约2mm。不透光的话灯就只是墙后的亮点。可拆（魔术贴/磁铁）方便维修。'};
+  META['ring'+(i+1)] = {em:'💡', en:'12-LED ring behind '+f.nm, zh:'12位 RGB 灯环 · '+f.nm, g:'glow', y:null, bom:0, pin:'pixels '+f.px+' of the 72-px chain · data GPIO 18',
+    note:'Twelve pixels, '+f.px+' on the chain. Behaviour contract: speaker\'s face solid 70% with amplitude flicker, every other face at 5%, 300ms crossfade on handoff, 8s breathing wave when idle at 15%.',
+    zhNote:'12颗像素（第 '+f.px+' 颗）。说话的脸亮70%，其他5%，切换300毫秒淡入淡出，待机8秒呼吸。'};
+  META['pad'+(i+1)] = {em:'👆', en:'TTP223 touch pad · '+f.nm, zh:'TTP223 触摸感应模块 · '+f.zh, g:'touch', y:[12,20], bom:(i===0?1:0), pin:'GPIO '+f.gpio+' (BCM) · momentary, active-HIGH · 200ms debounce',
+    note:'Tap this face to summon '+f.nm+' — demo-proof in a loud room where the wake word drowns. Senses through ≤3mm of plate; if the plate is thicker, run copper tape to the sense pin.'
+      + (i===0?' ¥12–20 buys the ×8 module pack (6 + 2 spares).':' From the same ×8 module pack (counted once in the BOM).'),
+    zhNote:'点这张脸就能召唤 '+f.nm+'——吵闲的房间里唤醒词不好用，触摸最靠得住。可穿透≤3mm面板。'};
+});
+
+// ----------------------------------------------------------------- build order
+const ASM = ['base','servo','spine','rope','pi','sd','bank','psu','speaker','wires','shifter','ledstrip',
+  'ring1','ring2','ring3','ring4','ring5','ring6','pad1','pad2','pad3','pad4','pad5','pad6',
+  'face1','face2','face3','face4','face5','face6','mic','mute'];
+
+// ----------------------------------------------------------------- bring-up steps
+const STEPS = [
+  {t:'LED chain alone', zh:'先点灯带', d:'led_test.py — rainbow sweep, confirm the pixel map',
+   parts:['ledstrip','shifter','ring1','ring2','ring3','ring4','ring5','ring6','pi','bank','wires'], rainbow:true},
+  {t:'Touch pads', zh:'六个触摸垫', d:'pad_test.py — tap each face, see its name print',
+   parts:['pad1','pad2','pad3','pad4','pad5','pad6','pi','wires','bank']},
+  {t:'Speaker', zh:'音箱', d:'speaker-test, then an audition mp3',
+   parts:['speaker','pi','bank','base']},
+  {t:'Mic', zh:'麦克风', d:'arecord -l, record + play back 5s',
+   parts:['mic','mute','pi','bank']},
+  {t:'Servo', zh:'舵机', d:'slow ±30° sweep on GPIO 12, own 5V rail',
+   parts:['servo','base','pi','bank']},
+  {t:'Shell + faces', zh:'装壳 + 上脸', d:'spine, rope, six plates on velcro',
+   parts:['spine','rope','base','face1','face2','face3','face4','face5','face6','ring1','ring2','ring3','ring4','ring5','ring6']},
+  {t:'Pull the plug', zh:'拔电测试', d:'cold boot <40s, greet the judge by name 🎤⬇️',
+   parts:ASM.slice(), full:true}
+];
+
+// ======================================================================
+// renderer / scene
+// ======================================================================
+const canvas = $('#c');
+const renderer = new THREE.WebGLRenderer({canvas, antialias:HIGH, alpha:true, powerPreference:'high-performance'});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, window.innerWidth<620 ? 1.6 : 2));
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x0d1116, 105, 215);
+const camera = new THREE.PerspectiveCamera(42, 1, 0.5, 400);
+const root = new THREE.Group(); scene.add(root);
+
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true; controls.dampingFactor = 0.075;
+controls.minDistance = 22; controls.maxDistance = 170;
+controls.maxPolarAngle = Math.PI*0.52; controls.minPolarAngle = 0.12;
+controls.target.set(0, 23, 0);
+controls.autoRotate = true; controls.autoRotateSpeed = 0.55;
+controls.enablePan = false;
+
+// lights: soft key + cool rim + ambient, plus 2 live point lights for the glow
+scene.add(new THREE.AmbientLight(0x3a4458, 0.75));
+const key = new THREE.DirectionalLight(0xfff0db, 1.25); key.position.set(26, 44, 34); scene.add(key);
+const rim = new THREE.DirectionalLight(0x5f8cff, 0.85); rim.position.set(-30, 20, -26); scene.add(rim);
+const fill = new THREE.DirectionalLight(0xffb443, 0.45); fill.position.set(-10, 8, 30); scene.add(fill);
+const under = new THREE.PointLight(0xffc98a, 18, 44, 2); under.position.set(0, -4, 12); scene.add(under);
+const pl = [new THREE.PointLight(0xffffff,0,60,2), new THREE.PointLight(0xffffff,0,60,2)];
+pl.forEach(l=>scene.add(l));
+
+// ======================================================================
+// procedural textures (canvas only — nothing is fetched)
+// ======================================================================
+function cvs(w,h){ const c=document.createElement('canvas'); c.width=w; c.height=h; return c; }
+function tex(c, srgb){ const t=new THREE.CanvasTexture(c); if(srgb!==false) t.colorSpace=THREE.SRGBColorSpace; t.anisotropy=4; return t; }
+const hex = n => '#'+n.toString(16).padStart(6,'0');
+
+function shieldPath(g,w,h,pad){
+  const r=w*0.16, x=pad, y=pad, W=w-pad*2, H=h-pad*2;
+  g.beginPath();
+  g.moveTo(x+r,y); g.lineTo(x+W-r,y); g.quadraticCurveTo(x+W,y,x+W,y+r);
+  g.lineTo(x+W, y+H*0.62); g.quadraticCurveTo(x+W, y+H, x+W*0.5, y+H);
+  g.quadraticCurveTo(x, y+H, x, y+H*0.62);
+  g.lineTo(x,y+r); g.quadraticCurveTo(x,y,x+r,y);
+  g.closePath();
+}
+// ---------------------------------------------------------------- tiki masks
+// one parametric carving per persona: brow / eyes / mouth / cheek motif.
+// three canvases per face: colour map, alpha silhouette, emissive mask (what the ring lights up).
+const FACE_ART = [
+  {eye:'closed',  mouth:'o',     brow:'wave',  cheek:'note'},    // OKE   — singing
+  {eye:'round',   mouth:'teeth', brow:'bar',   cheek:'strings'}, // KALA  — four strings
+  {eye:'leaf',    mouth:'line',  brow:'leaf',  cheek:'leaf'},    // CROPS — serene steward
+  {eye:'diamond', mouth:'tri',   brow:'crest', cheek:'spark'},   // DEVA  — the horn
+  {eye:'almond',  mouth:'grin',  brow:'bar',   cheek:'fhole'},   // OSO   — violin f-holes
+  {eye:'round',   mouth:'grin',  brow:'crown', cheek:'shaka'}    // SHAKA — host, crowned
+];
+function faceTextures(f, fi){
+  const W=320, H=224, A=FACE_ART[fi];
+  const cm=cvs(W,H), am=cvs(W,H), em=cvs(W,H);
+  const m=cm.getContext('2d'), al=am.getContext('2d'), e=em.getContext('2d');
+  const col = hex(f.col);
+  const DK='#2b2520', MD='#4c4337', LT='#8e8475';
+
+  // ---- silhouette
+  al.fillStyle='#000'; al.fillRect(0,0,W,H);
+  al.fillStyle='#fff'; shieldPath(al,W,H,7); al.fill();
+
+  // ---- frosted plate with a carved bevel
+  const g=m.createLinearGradient(0,0,60,H);
+  g.addColorStop(0,'#f3ecdb'); g.addColorStop(.45,'#ddd2bb'); g.addColorStop(1,'#b3a68e');
+  m.fillStyle=g; shieldPath(m,W,H,7); m.fill();
+  m.save(); shieldPath(m,W,H,7); m.clip();
+  // grain of the "carved" plate
+  m.globalAlpha=.07; m.strokeStyle='#2b2520'; m.lineWidth=1;
+  for(let i=0;i<46;i++){ const x=Math.random()*W; m.beginPath(); m.moveTo(x,0); m.lineTo(x+(Math.random()-.5)*14,H); m.stroke(); }
+  m.globalAlpha=1; m.restore();
+  m.lineWidth=11; m.strokeStyle=DK; shieldPath(m,W,H,13); m.stroke();
+  m.lineWidth=3;  m.strokeStyle=LT; shieldPath(m,W,H,23); m.stroke();
+  m.lineWidth=1.5; m.strokeStyle='rgba(255,246,225,.5)'; shieldPath(m,W,H,27); m.stroke();
+
+  e.fillStyle='#000'; e.fillRect(0,0,W,H);
+  const glowShape = (fn, soft) => { e.save(); e.fillStyle = soft||'#cfcfcf'; fn(e); e.fill(); e.restore(); };
+
+  // ---- brow
+  m.fillStyle=DK;
+  if(A.brow==='bar'){
+    m.beginPath(); m.moveTo(54,72); m.quadraticCurveTo(160,28,266,72);
+    m.quadraticCurveTo(160,56,54,72); m.closePath(); m.fill();
+  } else if(A.brow==='wave'){
+    m.lineWidth=11; m.strokeStyle=DK; m.beginPath(); m.moveTo(56,66);
+    m.bezierCurveTo(100,40,128,80,160,56); m.bezierCurveTo(192,34,224,76,264,56); m.stroke();
+  } else if(A.brow==='leaf'){
+    [[-1,56],[1,264]].forEach(([s,x0])=>{ m.beginPath(); m.moveTo(x0,78);
+      m.quadraticCurveTo(160-s*44,30,160-s*14,62); m.quadraticCurveTo(160-s*54,56,x0,78); m.closePath(); m.fill(); });
+  } else if(A.brow==='crest'){
+    m.beginPath(); m.moveTo(60,76); m.lineTo(118,52); m.lineTo(160,12); m.lineTo(202,52); m.lineTo(260,76);
+    m.quadraticCurveTo(160,50,60,76); m.closePath(); m.fill();
+    m.fillStyle=col; m.beginPath(); m.moveTo(160,20); m.lineTo(172,52); m.lineTo(148,52); m.closePath(); m.fill();
+    glowShape(c=>{c.beginPath();c.moveTo(160,18);c.lineTo(174,54);c.lineTo(146,54);c.closePath();},'#9a9a9a');
+  } else if(A.brow==='crown'){
+    m.beginPath(); m.moveTo(56,74);
+    for(let i=0;i<5;i++){ const x=56+i*52; m.lineTo(x+26, 34); m.lineTo(x+52, 70); }
+    m.quadraticCurveTo(160,56,56,74); m.closePath(); m.fill();
+  }
+
+  // ---- eyes
+  const EY=102, ex=[112,208];
+  ex.forEach((x,k)=>{
+    m.fillStyle=DK;
+    if(A.eye==='closed'){
+      m.lineWidth=10; m.strokeStyle=DK; m.beginPath(); m.arc(x,EY+6,26,Math.PI*1.08,Math.PI*1.92,true); m.stroke();
+      m.lineWidth=5; m.strokeStyle=col; m.beginPath(); m.arc(x,EY+4,26,Math.PI*1.1,Math.PI*1.9,true); m.stroke();
+      glowShape(c=>{c.ellipse(x,EY-4,30,13,0,0,7);}, '#6e6e6e');
+    } else if(A.eye==='diamond'){
+      m.beginPath(); m.moveTo(x,EY-30); m.lineTo(x+30,EY); m.lineTo(x,EY+30); m.lineTo(x-30,EY); m.closePath(); m.fill();
+      m.fillStyle=col; m.beginPath(); m.moveTo(x,EY-18); m.lineTo(x+18,EY); m.lineTo(x,EY+18); m.lineTo(x-18,EY); m.closePath(); m.fill();
+      glowShape(c=>{c.moveTo(x,EY-22);c.lineTo(x+22,EY);c.lineTo(x,EY+22);c.lineTo(x-22,EY);c.closePath();});
+    } else if(A.eye==='leaf'){
+      m.beginPath(); m.ellipse(x,EY,30,15,k?0.22:-0.22,0,7); m.fill();
+      m.fillStyle=col; m.beginPath(); m.ellipse(x,EY,19,9,k?0.22:-0.22,0,7); m.fill();
+      glowShape(c=>{c.ellipse(x,EY,23,12,k?0.22:-0.22,0,7);});
+    } else if(A.eye==='almond'){
+      m.beginPath(); m.moveTo(x-32,EY); m.quadraticCurveTo(x,EY-30,x+32,EY);
+      m.quadraticCurveTo(x,EY+30,x-32,EY); m.closePath(); m.fill();
+      m.fillStyle=col; m.beginPath(); m.ellipse(x,EY,16,11,0,0,7); m.fill();
+      glowShape(c=>{c.ellipse(x,EY,22,15,0,0,7);});
+    } else {
+      m.beginPath(); m.ellipse(x,EY,31,25,0,0,7); m.fill();
+      m.fillStyle=col; m.beginPath(); m.ellipse(x,EY,19,15,0,0,7); m.fill();
+      m.fillStyle='#fff6e6'; m.beginPath(); m.ellipse(x-4,EY-3,8,7,0,0,7); m.fill();
+      glowShape(c=>{c.ellipse(x,EY,25,20,0,0,7);});
+    }
+  });
+
+  // ---- nose
+  m.fillStyle=MD;
+  m.beginPath(); m.moveTo(160,74); m.lineTo(182,150); m.lineTo(138,150); m.closePath(); m.fill();
+  m.fillStyle=DK;
+  m.beginPath(); m.ellipse(148,144,6,4,0,0,7); m.fill();
+  m.beginPath(); m.ellipse(172,144,6,4,0,0,7); m.fill();
+
+  // ---- mouth
+  const MY=172;
+  m.fillStyle=DK;
+  if(A.mouth==='o'){
+    m.beginPath(); m.ellipse(160,MY,32,26,0,0,7); m.fill();
+    m.fillStyle=col; m.beginPath(); m.ellipse(160,MY,21,16,0,0,7); m.fill();
+    glowShape(c=>{c.ellipse(160,MY,26,21,0,0,7);},'#e8e8e8');
+  } else if(A.mouth==='tri'){
+    m.beginPath(); m.moveTo(110,MY-18); m.lineTo(210,MY-18); m.lineTo(160,MY+26); m.closePath(); m.fill();
+    m.fillStyle=col; m.beginPath(); m.moveTo(124,MY-10); m.lineTo(196,MY-10); m.lineTo(160,MY+14); m.closePath(); m.fill();
+    glowShape(c=>{c.moveTo(120,MY-12);c.lineTo(200,MY-12);c.lineTo(160,MY+18);c.closePath();},'#e0e0e0');
+  } else if(A.mouth==='line'){
+    m.lineWidth=13; m.strokeStyle=DK; m.lineCap='round';
+    m.beginPath(); m.moveTo(104,MY); m.quadraticCurveTo(160,MY+16,216,MY); m.stroke();
+    m.lineWidth=5; m.strokeStyle=col; m.beginPath(); m.moveTo(110,MY+1); m.quadraticCurveTo(160,MY+14,210,MY+1); m.stroke();
+    glowShape(c=>{c.ellipse(160,MY+7,56,10,0,0,7);},'#9e9e9e');
+  } else {                                   // teeth / grin
+    const w = A.mouth==='grin' ? 72 : 64;
+    m.beginPath(); m.moveTo(160-w,MY-16); m.quadraticCurveTo(160,MY-26,160+w,MY-16);
+    m.quadraticCurveTo(160+w+6,MY+30,160,MY+34); m.quadraticCurveTo(160-w-6,MY+30,160-w,MY-16); m.closePath(); m.fill();
+    m.fillStyle=col; m.fillRect(160-w+8,MY-10,(w-8)*2,34);
+    m.fillStyle='#efe6d4';
+    const n=A.mouth==='grin'?7:6, tw=((w-8)*2)/n;
+    for(let i=0;i<n;i++) m.fillRect(160-w+10+i*tw, MY-8, tw-4, A.mouth==='grin'? 30 : 14);
+    m.fillStyle=DK; m.fillRect(160-w+8, MY+6, (w-8)*2, 4);
+    glowShape(c=>{c.moveTo(160-w+4,MY-12);c.quadraticCurveTo(160,MY-22,160+w-4,MY-12);
+      c.quadraticCurveTo(160+w,MY+26,160,MY+30);c.quadraticCurveTo(160-w,MY+26,160-w+4,MY-12);c.closePath();},'#cccccc');
+  }
+
+  // ---- cheek motif (the persona signature)
+  m.strokeStyle=MD; m.lineWidth=5; m.lineCap='round'; m.fillStyle=MD;
+  const cheeks=[[52,1],[268,-1]];
+  cheeks.forEach(([cx,s])=>{
+    if(A.cheek==='note'){
+      m.beginPath(); m.ellipse(cx+s*2,150,9,7,-0.4,0,7); m.fill();
+      m.lineWidth=4; m.beginPath(); m.moveTo(cx+s*9,148); m.lineTo(cx+s*11,112); m.stroke();
+      m.beginPath(); m.moveTo(cx+s*11,112); m.quadraticCurveTo(cx+s*26,116,cx+s*20,130); m.stroke();
+    } else if(A.cheek==='strings'){
+      for(let i=0;i<4;i++){ m.lineWidth=2.6; m.beginPath(); m.moveTo(cx-6+i*5,112); m.lineTo(cx-6+i*5,168); m.stroke(); }
+    } else if(A.cheek==='leaf'){
+      m.beginPath(); m.moveTo(cx,170); m.quadraticCurveTo(cx+s*26,140,cx+s*4,112);
+      m.quadraticCurveTo(cx-s*20,140,cx,170); m.closePath(); m.fill();
+      m.strokeStyle=LT; m.lineWidth=2; m.beginPath(); m.moveTo(cx,168); m.lineTo(cx+s*3,116); m.stroke(); m.strokeStyle=MD;
+    } else if(A.cheek==='spark'){
+      for(let i=0;i<4;i++){ const an=i*Math.PI/4; m.lineWidth=3.4; m.beginPath();
+        m.moveTo(cx-Math.cos(an)*15, 140-Math.sin(an)*15); m.lineTo(cx+Math.cos(an)*15, 140+Math.sin(an)*15); m.stroke(); }
+    } else if(A.cheek==='fhole'){
+      m.lineWidth=5; m.beginPath(); m.moveTo(cx+s*6,112);
+      m.bezierCurveTo(cx-s*14,130, cx+s*20,150, cx-s*4,170); m.stroke();
+      m.beginPath(); m.ellipse(cx+s*7,116,4,4,0,0,7); m.fill();
+      m.beginPath(); m.ellipse(cx-s*5,168,4,4,0,0,7); m.fill();
+    } else if(A.cheek==='shaka'){
+      m.lineWidth=7; m.beginPath(); m.moveTo(cx-s*8,166); m.quadraticCurveTo(cx-s*14,138,cx+s*2,132); m.stroke();
+      m.lineWidth=5.5; m.beginPath(); m.moveTo(cx+s*2,132); m.lineTo(cx+s*4,110); m.stroke();
+      m.beginPath(); m.moveTo(cx-s*8,166); m.lineTo(cx-s*22,176); m.stroke();
+    }
+  });
+
+  // ---- soft backlight so the whole plate lifts when the ring is bright
+  const bl=e.createRadialGradient(160,120,12,160,120,172);
+  bl.addColorStop(0,'rgba(104,104,104,1)'); bl.addColorStop(.55,'rgba(42,42,42,1)'); bl.addColorStop(1,'rgba(0,0,0,0)');
+  e.globalCompositeOperation='lighter'; e.fillStyle=bl; e.fillRect(0,0,W,H);
+  return {map:tex(cm), alpha:tex(am,false), emis:tex(em)};
+}
+function glowSprite(){
+  const c=cvs(128,128), g=c.getContext('2d');
+  const r=g.createRadialGradient(64,64,0,64,64,64);
+  r.addColorStop(0,'rgba(255,255,255,1)'); r.addColorStop(.18,'rgba(255,255,255,.72)');
+  r.addColorStop(.45,'rgba(255,255,255,.22)'); r.addColorStop(1,'rgba(255,255,255,0)');
+  g.fillStyle=r; g.fillRect(0,0,128,128); return tex(c);
+}
+function shadowTex(){
+  const c=cvs(256,256), g=c.getContext('2d');
+  const r=g.createRadialGradient(128,128,4,128,128,128);
+  r.addColorStop(0,'rgba(0,0,0,.82)'); r.addColorStop(.42,'rgba(0,0,0,.45)');
+  r.addColorStop(.72,'rgba(0,0,0,.12)'); r.addColorStop(1,'rgba(0,0,0,0)');
+  g.fillStyle=r; g.fillRect(0,0,256,256); return tex(c,false);
+}
+function pcbTex(hue){
+  const c=cvs(128,128), g=c.getContext('2d');
+  g.fillStyle=hue; g.fillRect(0,0,128,128);
+  g.strokeStyle='rgba(255,215,120,.5)'; g.lineWidth=1.5;
+  for(let i=0;i<22;i++){
+    g.beginPath(); let x=Math.random()*128, y=Math.random()*128; g.moveTo(x,y);
+    for(let j=0;j<3;j++){ x+=(Math.random()-.5)*46; y+=(Math.random()-.5)*46; g.lineTo(x,y); }
+    g.stroke();
+  }
+  g.fillStyle='rgba(220,200,140,.65)';
+  for(let i=0;i<26;i++) g.fillRect(Math.random()*120, Math.random()*120, 3, 3);
+  return tex(c);
+}
+function woodTex(c1,c2,c3,knots){
+  const W=256,H=256,c=cvs(W,H),g=c.getContext('2d');
+  const lg=g.createLinearGradient(0,0,W,0);
+  lg.addColorStop(0,c1); lg.addColorStop(.4,c2); lg.addColorStop(.75,c1); lg.addColorStop(1,c3);
+  g.fillStyle=lg; g.fillRect(0,0,W,H);
+  g.globalAlpha=.5;
+  for(let i=0;i<110;i++){
+    const x=Math.random()*W;
+    g.strokeStyle = Math.random()<.5 ? 'rgba(60,42,26,.30)' : 'rgba(255,230,190,.17)';
+    g.lineWidth = .6+Math.random()*2.1;
+    g.beginPath(); g.moveTo(x,0);
+    for(let y=0;y<=H;y+=32) g.lineTo(x+Math.sin(y*.04+i)*3.4+(Math.random()-.5)*2, y);
+    g.stroke();
+  }
+  g.globalAlpha=1;
+  for(let k=0;k<knots;k++){                                  // bamboo nodes / growth rings
+    const y=(k+.5)*H/knots;
+    g.strokeStyle='rgba(54,38,24,.38)'; g.lineWidth=5;
+    g.beginPath(); g.moveTo(0,y); g.lineTo(W,y); g.stroke();
+    g.strokeStyle='rgba(255,236,200,.22)'; g.lineWidth=2;
+    g.beginPath(); g.moveTo(0,y-4); g.lineTo(W,y-4); g.stroke();
+  }
+  return tex(c);
+}
+function roughTex(base, amt){
+  const W=128,H=128,c=cvs(W,H),g=c.getContext('2d');
+  g.fillStyle=base; g.fillRect(0,0,W,H);
+  for(let i=0;i<2600;i++){
+    g.fillStyle='rgba(255,255,255,'+(Math.random()*amt).toFixed(3)+')';
+    g.fillRect(Math.random()*W, Math.random()*H, 2, 2);
+  }
+  return tex(c,false);
+}
+function ropeTex(){
+  const W=128,H=128,c=cvs(W,H),g=c.getContext('2d');
+  g.fillStyle='#b08f54'; g.fillRect(0,0,W,H);
+  for(let i=-H;i<W;i+=11){                                    // twisted fibre bands
+    const gr=g.createLinearGradient(i,0,i+11,H);
+    gr.addColorStop(0,'rgba(80,58,28,.55)'); gr.addColorStop(.35,'rgba(226,197,140,.65)');
+    gr.addColorStop(.7,'rgba(150,120,70,.4)'); gr.addColorStop(1,'rgba(80,58,28,.55)');
+    g.fillStyle=gr; g.beginPath(); g.moveTo(i,0); g.lineTo(i+11,0); g.lineTo(i+11+H,H); g.lineTo(i+H,H); g.closePath(); g.fill();
+  }
+  for(let i=0;i<900;i++){ g.fillStyle='rgba(255,240,200,'+(Math.random()*.25).toFixed(2)+')';
+    g.fillRect(Math.random()*W,Math.random()*H,1.6,1.6); }
+  return tex(c);
+}
+const SPR = glowSprite();
+// invisible-but-clickable proxy: a 12-LED ring is only ~4px of torus on screen
+const HITMAT = new THREE.MeshBasicMaterial({colorWrite:false, depthWrite:false, transparent:true, opacity:0});
+const TEX_SPINE = woodTex('#8e7c63','#a38f72','#6d5e4a', 7);
+const TEX_SPINE_R = roughTex('#8a8a8a', .5);
+const TEX_BASE  = woodTex('#5d4028','#6f4e33','#402c1b', 3);
+const TEX_ROPE  = ropeTex();
+
+// ======================================================================
+// materials + part registry
+// ======================================================================
+const P = {};            // id -> part record
+const pickables = [];    // meshes for raycasting
+function std(o){ return new THREE.MeshStandardMaterial(Object.assign({transparent:true},o)); }
+
+function reg(id, obj, opts){
+  opts = opts||{};
+  const mats=[];
+  obj.traverse(o=>{
+    o.userData.id = id;
+    if(o.isMesh || o.isSprite || o.isInstancedMesh){
+      if(o.isMesh || o.isInstancedMesh) pickables.push(o);
+      const ms = Array.isArray(o.material)?o.material:[o.material];
+      ms.forEach(m=>{ if(m && m!==HITMAT && mats.indexOf(m)<0){ m.transparent=true; m.userData.o0 = (m.opacity===undefined?1:m.opacity); mats.push(m); } });
+    }
+  });
+  const off = opts.off||new THREE.Vector3();
+  const L = off.length();
+  let arc;
+  if(Math.hypot(off.x,off.z) < 1.2)                  // mostly vertical travel: swing it forward
+    arc = new THREE.Vector3(0.42,0,0.62).normalize().multiplyScalar(L*0.16);
+  else                                               // radial travel: swing tangentially + lift
+    arc = new THREE.Vector3(0,1,0).cross(off).normalize().multiplyScalar(L*0.13)
+            .add(new THREE.Vector3(0, L*0.06, 0));
+  P[id] = {id, obj, mats, meta:META[id], home:obj.position.clone(), rot0:obj.rotation.clone(), arc,
+    off, spin:opts.spin||new THREE.Vector3(),
+    lab:opts.lab||new THREE.Vector3(), side:opts.side||1, labOn:!!opts.labOn, labMob:!!opts.labMob,
+    group:(META[id]?META[id].g:'shell'), visT:1, dimT:1, stageT:0, pulse:0, el:null};
+  root.add(obj);
+  return P[id];
+}
+const V = (x,y,z)=>new THREE.Vector3(x,y,z);
+
+// ----------------------------------------------------------------- geometry
+const SR = 5.0;                        // spine radius
+const Y0 = 2.45, BASE_H = 3.6;         // servo top / base height
+const SP_Y0 = Y0+BASE_H, SP_H = 40;    // spine from 6.05 to 46.05
+const FY = i => 10.6 + i*6.2;          // face centre heights -> 10.6 .. 41.6
+
+// --- servo -------------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(5.4,2.3,3.0), std({color:0x1c2634, roughness:.5, metalness:.25}));
+  body.position.y = 1.15; g.add(body);
+  const horn = new THREE.Mesh(new THREE.CylinderGeometry(1.5,1.5,.5,18), std({color:0xd8dde6, roughness:.35, metalness:.5}));
+  horn.position.y = 2.5; g.add(horn);
+  const brk = new THREE.Mesh(new THREE.BoxGeometry(7.6,.45,5.6), std({color:0x2a3444, roughness:.6, metalness:.3}));
+  brk.position.y = .22; g.add(brk);
+  const wire = new THREE.Mesh(new THREE.TorusGeometry(1.1,.14,6,14,4.2), std({color:0xcf7f2b, roughness:.8}));
+  wire.position.set(-2.9,1.2,1.2); wire.rotation.y=Math.PI/2; g.add(wire);
+  g.position.y = 0;
+  reg('servo', g, {off:V(0,-10.5,0), spin:V(0,.5,0), lab:V(0,1.4,2.8), side:1, labOn:true});
+}
+// --- base --------------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const disc = new THREE.Mesh(new THREE.CylinderGeometry(8,8.6,BASE_H,44,1), std({map:TEX_BASE, color:0xffffff, roughness:.82, metalness:.04}));
+  disc.position.y = BASE_H/2; g.add(disc);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(7.2,7.2,.5,40), std({map:TEX_BASE, color:0x8a7a68, roughness:.9}));
+  top.position.y = BASE_H; g.add(top);
+  // sisal wrap round the rim
+  const wrapM = std({map:TEX_ROPE, color:0xffffff, roughness:.92});
+  for(let i=0;i<3;i++){
+    const t = new THREE.Mesh(new THREE.TorusGeometry(8.35,.3,7,54), wrapM);
+    t.rotation.x = Math.PI/2; t.position.y = .8+i*.95; g.add(t);
+  }
+  // speaker grille slot (front)
+  const grl = new THREE.Mesh(new THREE.BoxGeometry(5.6,2.4,.3), std({color:0x12161d, roughness:.9}));
+  grl.position.set(0,2.0,8.2); g.add(grl);
+  g.position.y = Y0;
+  reg('base', g, {off:V(0,-5.5,0), lab:V(-6,1.6,4), side:-1, labOn:true, labMob:true});
+}
+// --- spine -------------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const m = new THREE.MeshPhysicalMaterial({map:TEX_SPINE, roughnessMap:TEX_SPINE_R, color:0xffffff,
+    roughness:.62, metalness:.04, opacity:.5, transparent:true, side:THREE.DoubleSide,
+    clearcoat:.35, clearcoatRoughness:.55});
+  const tube = new THREE.Mesh(new THREE.CylinderGeometry(SR,SR,SP_H,40,1,true), m);
+  tube.position.y = SP_H/2; g.add(tube);
+  const inner = new THREE.Mesh(new THREE.CylinderGeometry(SR-.35,SR-.35,SP_H-.4,28,1,true),
+    std({color:0x2a2620, roughness:.9, side:THREE.BackSide, opacity:.8}));
+  inner.position.y = SP_H/2; g.add(inner);
+  const capM = std({color:0x2c3545, roughness:.7, metalness:.2});
+  [0, SP_H].forEach(y=>{
+    const c = new THREE.Mesh(new THREE.CylinderGeometry(SR+.18,SR+.18,.6,36), capM);
+    c.position.y = y; g.add(c);
+  });
+  g.position.y = SP_Y0;
+  reg('spine', g, {off:V(0,4,0), lab:V(-5.2,13,1.5), side:-1, labOn:true, labMob:true});
+}
+// --- rope bands --------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const ropeM = std({map:TEX_ROPE, color:0xffffff, roughness:.92});
+  function band(y0, turns, h){
+    const pts=[]; const N=turns*22;
+    for(let i=0;i<=N;i++){ const a=i/N*turns*Math.PI*2; pts.push(V(Math.cos(a)*(SR+.3), y0+i/N*h, Math.sin(a)*(SR+.3))); }
+    const cur = new THREE.CatmullRomCurve3(pts);
+    const t = new THREE.Mesh(new THREE.TubeGeometry(cur, turns*20, .3, 6, false), ropeM);
+    g.add(t);
+  }
+  band(SP_Y0+.7, 3, 1.7); band(FY(2)+3.35, 2, 1.1); band(SP_Y0+SP_H-2.4, 3, 1.7);
+  reg('rope', g, {off:V(-1,9,0), lab:V(0,SP_Y0+SP_H-1.4,5.4), side:1, labOn:true});
+}
+// --- raspberry pi ------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const board = new THREE.Mesh(new THREE.BoxGeometry(8.5,.22,5.6), std({map:pcbTex('#1f6b3e'), color:0xffffff, roughness:.55}));
+  g.add(board);
+  const soc = new THREE.Mesh(new THREE.BoxGeometry(1.6,.5,1.6), std({color:0x15181f, roughness:.4, metalness:.4}));
+  soc.position.set(-.4,.36,0); g.add(soc);
+  const gpio = new THREE.Mesh(new THREE.BoxGeometry(6.6,.6,.5), std({color:0x0d0f14, roughness:.4}));
+  gpio.position.set(-.2,.4,-2.4); g.add(gpio);
+  const usbM = std({color:0xb9c2cc, roughness:.3, metalness:.75});
+  [[-1.4,2.3],[1.0,2.3]].forEach(([x,z])=>{ const u=new THREE.Mesh(new THREE.BoxGeometry(1.5,.75,1.5), usbM); u.position.set(x,.42,z); g.add(u); });
+  const eth = new THREE.Mesh(new THREE.BoxGeometry(1.7,.9,1.4), usbM); eth.position.set(3.2,.5,1.9); g.add(eth);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.18,8,8), std({color:0x22ff66, emissive:0x22ff66, emissiveIntensity:2}));
+  led.position.set(-3.8,.3,2.3); g.add(led);
+  g.position.set(0, 9.4, 0);
+  reg('pi', g, {off:V(-23,-3,2), spin:V(.1,-.5,.22), lab:V(-3,1.2,0), side:-1, labOn:true, labMob:true});
+}
+// --- microSD x2 --------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const m1 = std({color:0x1b1f27, roughness:.5}), m2 = std({color:0x8e2a2a, roughness:.5});
+  const a = new THREE.Mesh(new THREE.BoxGeometry(1.5,.12,1.1), m1); g.add(a);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(1.5,.12,1.1), m2); b.position.set(.5,.3,.5); b.rotation.y=.3; g.add(b);
+  g.position.set(-3.2, 9.9, 1.4);
+  reg('sd', g, {off:V(-19,6,8), spin:V(.3,.8,0), lab:V(0,.6,0), side:-1, labOn:true});
+}
+// --- power bank --------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const b = new THREE.Mesh(new THREE.BoxGeometry(9.6,2.4,6.2), std({color:0x20242e, roughness:.35, metalness:.35}));
+  g.add(b);
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(9.7,.25,.5), std({color:0xffb443, emissive:0xffb443, emissiveIntensity:.7, roughness:.4}));
+  strip.position.set(0,.9,3.1); g.add(strip);
+  const portM = std({color:0x0c0e13, roughness:.6});
+  [[-2.2],[0],[2.2]].forEach(([x])=>{ const p=new THREE.Mesh(new THREE.BoxGeometry(1.1,.5,.35), portM); p.position.set(x,0,3.12); g.add(p); });
+  g.position.set(0, Y0+1.5, -1.2);
+  reg('bank', g, {off:V(0,-6,-20), spin:V(0,.4,.1), lab:V(0,1.3,-3.2), side:-1, labOn:true});
+}
+// --- official USB-C PSU (bench power, sits beside the totem) ------------
+{
+  const g = new THREE.Group();
+  const shell = std({color:0xe9e6df, roughness:.55, metalness:.05});
+  const brick = new THREE.Mesh(new THREE.BoxGeometry(3.4,2.0,2.2), shell); g.add(brick);
+  const pins = new THREE.Mesh(new THREE.BoxGeometry(1.5,.22,.9), std({color:0xb9b2a4, roughness:.35, metalness:.6}));
+  pins.position.set(0,1.1,0); g.add(pins);
+  const led = new THREE.Mesh(new THREE.SphereGeometry(.16,10,8), std({color:0x53c98f, emissive:0x53c98f, emissiveIntensity:1.1, roughness:.4}));
+  led.position.set(1.0,-.5,1.12); g.add(led);
+  // the lead, arcing toward the base
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-1.4,-.4,.6), new THREE.Vector3(3.4,-.9,2.0),
+    new THREE.Vector3(7.4,-.6,-.4), new THREE.Vector3(10.4,-.2,-3.6)
+  ]);
+  const lead = new THREE.Mesh(new THREE.TubeGeometry(curve,30,.17,7,false), std({color:0xdedad2, roughness:.75}));
+  g.add(lead);
+  const tip = new THREE.Mesh(new THREE.BoxGeometry(.75,.42,.9), std({color:0x9a958c, roughness:.4, metalness:.5}));
+  tip.position.set(10.5,-.2,-3.8); g.add(tip);
+  g.position.set(-11.6, 1.15, 6.2); g.rotation.y = .42;
+  reg('psu', g, {off:V(-9,-1,9), spin:V(0,-.5,.15), lab:V(-1.4,1.3,0), side:-1, labOn:true});
+}
+// --- speaker -----------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(5.2,3.4,3.0), std({color:0x1a1e26, roughness:.7}));
+  g.add(box);
+  const cone = new THREE.Mesh(new THREE.CylinderGeometry(1.9,1.2,.9,24), std({color:0x3b3127, roughness:.9}));
+  cone.rotation.x = Math.PI/2; cone.position.z = 1.6; g.add(cone);
+  const dome = new THREE.Mesh(new THREE.SphereGeometry(.7,16,12), std({color:0xcdbda0, roughness:.4, metalness:.3}));
+  dome.position.z = 2.0; g.add(dome);
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(1.95,.18,8,26), std({color:0x2d343f, roughness:.6, metalness:.3}));
+  ring.position.z = 1.55; g.add(ring);
+  g.position.set(0, Y0+2.0, 4.2);
+  reg('speaker', g, {off:V(0,-3,17), spin:V(-.2,0,0), lab:V(0,-1.2,2.4), side:1, labOn:true, labMob:true});
+}
+// --- wires + breadboard ------------------------------------------------
+{
+  const g = new THREE.Group();
+  const bb = new THREE.Mesh(new THREE.BoxGeometry(5.4,.7,3.4), std({color:0xdcd8cf, roughness:.8}));
+  g.add(bb);
+  const ch = new THREE.Mesh(new THREE.BoxGeometry(5.4,.1,.5), std({color:0x9c9890, roughness:.9}));
+  ch.position.y=.36; g.add(ch);
+  const cols=[0xff5a5a,0xffd24a,0x4fc3f7,0x6ee07a,0xc792ea];
+  cols.forEach((c,i)=>{
+    const x0=-2+i*1, pts=[V(x0,.4,.6), V(x0+.6,2.4+i*.4,1.6), V(x0*0.4,5.6+i*.9,.6), V(.3,8.4+i*1.1,-.4)];
+    const cur=new THREE.CatmullRomCurve3(pts);
+    const t=new THREE.Mesh(new THREE.TubeGeometry(cur,22,.11,5,false), std({color:c, roughness:.5}));
+    g.add(t);
+  });
+  g.position.set(.6, SP_Y0+1.0, -1.6);
+  reg('wires', g, {off:V(-16,-9,11), spin:V(.2,.6,-.2), lab:V(-2,1.2,0), side:-1, labOn:true});
+}
+// --- level shifter + passives -----------------------------------------
+{
+  const g = new THREE.Group();
+  const pcb = new THREE.Mesh(new THREE.BoxGeometry(2.8,.18,1.6), std({map:pcbTex('#1d2b6b'), color:0xffffff, roughness:.6}));
+  g.add(pcb);
+  const ic = new THREE.Mesh(new THREE.BoxGeometry(1.5,.4,.8), std({color:0x11141a, roughness:.45}));
+  ic.position.y=.28; g.add(ic);
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(.55,.55,1.3,16), std({color:0x1b2a4a, roughness:.4, metalness:.3}));
+  cap.position.set(1.9,.65,.4); g.add(cap);
+  const res = new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,.9,8), std({color:0xc7a06a, roughness:.6}));
+  res.rotation.z=Math.PI/2; res.position.set(-1.0,.4,.6); g.add(res);
+  g.position.set(-2.6, SP_Y0+3.4, -2.0);
+  reg('shifter', g, {off:V(-18,8,-9), spin:V(.3,-.7,.3), lab:V(-1.4,.8,0), side:-1, labOn:true});
+}
+// --- WS2812B chain up the back ----------------------------------------
+{
+  const g = new THREE.Group();
+  const H = SP_H-7;
+  const strip = new THREE.Mesh(new THREE.BoxGeometry(1.5,H,.22), std({color:0xb5aea0, roughness:.7}));
+  strip.position.y = H/2; g.add(strip);
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.7,H,.12), std({color:0x1d222c, roughness:.8}));
+  back.position.set(0,H/2,-.2); g.add(back);
+  const pxGeo = new THREE.BoxGeometry(.9,.9,.2);
+  const pxMat = std({color:0xe8e4da, emissive:0xffd9a0, emissiveIntensity:.18, roughness:.45});
+  const n = 26, im = new THREE.InstancedMesh(pxGeo, pxMat, n);
+  const mt = new THREE.Matrix4();
+  for(let i=0;i<n;i++){ mt.makeTranslation(0, 1.2+i*(H-2.4)/(n-1), .16); im.setMatrixAt(i,mt); }
+  im.instanceMatrix.needsUpdate = true; g.add(im);
+  g.position.set(0, SP_Y0+3.5, -(SR+.2));
+  reg('ledstrip', g, {off:V(0,2,-20), spin:V(0,-.3,0), lab:V(0,H*.62,-1), side:1, labOn:true});
+}
+// --- faces / rings / pads ---------------------------------------------
+const RINGS=[], HALOS=[], PLATES=[];
+FACES.forEach((f,i)=>{
+  const yaw = YAW[i], y = FY(i);
+  const dir = V(Math.sin(yaw), 0, Math.cos(yaw));
+  const fa = yaw + (i-2.5)*0.42;                 // explode fan angle
+  const fan = V(Math.sin(fa), 0, Math.cos(fa));
+
+  // ring: torus + 12 instanced pixels
+  {
+    const g = new THREE.Group();
+    const bodyM = std({color:0x13171f, roughness:.7});
+    const tor = new THREE.Mesh(new THREE.TorusGeometry(2.25,.34,8,30), bodyM); g.add(tor);
+    const pxM = new THREE.MeshStandardMaterial({color:0x2b3038, emissive:0xffffff, emissiveIntensity:.25,
+      roughness:.35, transparent:true});
+    // three only applies instanceColor to the diffuse term — push it into the emissive term too,
+    // so each of the 72 pixels can be its own colour (persona glow / rainbow pixel-map sweep)
+    pxM.onBeforeCompile = sh => {
+      sh.fragmentShader = sh.fragmentShader.replace('#include <emissivemap_fragment>',
+        '#include <emissivemap_fragment>\n\ttotalEmissiveRadiance *= vColor;');
+    };
+    const im = new THREE.InstancedMesh(new THREE.SphereGeometry(.3,10,8), pxM, 12);
+    const mt=new THREE.Matrix4(), c=new THREE.Color();
+    for(let k=0;k<12;k++){
+      const a = k/12*Math.PI*2;
+      mt.makeTranslation(Math.cos(a)*2.25, Math.sin(a)*2.25, .12); im.setMatrixAt(k,mt);
+      im.setColorAt(k, c.setHex(f.col));
+    }
+    im.instanceMatrix.needsUpdate=true; if(im.instanceColor) im.instanceColor.needsUpdate=true;
+    g.add(im);
+    const hit = new THREE.Mesh(new THREE.CircleGeometry(2.95,18), HITMAT);
+    hit.position.z = .45; g.add(hit);
+    // additive halo
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({map:SPR, color:f.col, transparent:true,
+      blending:THREE.AdditiveBlending, opacity:0, depthWrite:false}));
+    sp.scale.set(13,13,1); sp.position.z = 1.2; g.add(sp);
+    g.position.set(dir.x*(SR-.55), y, dir.z*(SR-.55));
+    g.rotation.y = yaw;
+    const rec = reg('ring'+(i+1), g, {off:fan.clone().multiplyScalar(10.5).add(V(0,(i-2.5)*0.5,0)),
+      spin:V(0,0,.6), lab:V(0,2.9,0), side:(fan.x<0?-1:1), labOn:(i===5), labMob:false});
+    rec.px = im; rec.pxMat = pxM; rec.halo = sp; rec.face = f; RINGS.push(rec);
+  }
+  // face plate: curved translucent shield hugging the tube
+  {
+    const T = faceTextures(f, i);
+    const arc = 1.46, r = SR+.42;
+    const geo = new THREE.CylinderGeometry(r,r,4.9,28,1,true, -arc/2, arc);
+    const matOpt = {map:T.map, alphaMap:T.alpha, emissive:new THREE.Color(f.col), emissiveMap:T.emis,
+      emissiveIntensity:.28, transparent:true, alphaTest:.45, opacity:.86, roughness:.42, metalness:0,
+      // FrontSide on purpose: r160's transmission pass re-renders every DoubleSide transmissive
+      // mesh with material.needsUpdate = true twice per frame (a shader-recompile storm).
+      side:THREE.FrontSide, clearcoat:.55, clearcoatRoughness:.3,
+      transmission:.28, thickness:1.2, ior:1.42};
+    const m = new THREE.MeshPhysicalMaterial(matOpt);
+    const plate = new THREE.Mesh(geo, m);
+    const g = new THREE.Group(); g.add(plate);
+    g.position.y = y; g.rotation.y = yaw;
+    const rec = reg('face'+(i+1), g, {off:fan.clone().multiplyScalar(19.5).add(V(0,(i-2.5)*1.2,0)),
+      spin:V(0,0,0), lab:V(0,2.8,0.8), side:(fan.x<0?-1:1), labOn:(i===5), labMob:true});
+    rec.mat = m; rec.face = f; PLATES.push(rec);
+  }
+  // touch pad
+  {
+    const g = new THREE.Group();
+    const pcb = new THREE.Mesh(new THREE.BoxGeometry(1.5,1.5,.2), std({map:pcbTex('#2a1f52'), color:0xffffff, roughness:.6}));
+    g.add(pcb);
+    const chip = new THREE.Mesh(new THREE.BoxGeometry(.5,.5,.22), std({color:0x0e1116, roughness:.4}));
+    chip.position.z=.2; g.add(chip);
+    const pad = new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.1,16), std({color:0xd9b25f, roughness:.3, metalness:.7, emissive:f.col, emissiveIntensity:.15}));
+    pad.rotation.x=Math.PI/2; pad.position.set(0,.45,.22); g.add(pad);
+    const phit = new THREE.Mesh(new THREE.PlaneGeometry(2.8,2.8), HITMAT);
+    phit.position.z = .4; g.add(phit);
+    g.position.set(dir.x*(SR+.25), y-3.35, dir.z*(SR+.25));
+    g.rotation.y = yaw;
+    const rec = reg('pad'+(i+1), g, {off:fan.clone().multiplyScalar(14.5).add(V(0,-2.6,0)),
+      spin:V(0,0,-.5), lab:V(0,-1.4,0), side:(fan.x<0?-1:1), labOn:(i===5), labMob:false});
+    rec.face = f;
+  }
+});
+// --- mic (top) ---------------------------------------------------------
+{
+  const g = new THREE.Group();
+  const puck = new THREE.Mesh(new THREE.CylinderGeometry(3.3,2.9,1.3,36), std({color:0x6a7382, roughness:.4, metalness:.45}));
+  g.add(puck);
+  const mesh = new THREE.Mesh(new THREE.CylinderGeometry(2.7,2.7,.35,30), std({color:0x30363f, roughness:.95}));
+  mesh.position.y=.8; g.add(mesh);
+  const btn = new THREE.Mesh(new THREE.TorusGeometry(1.5,.14,8,26), std({color:0x4fc3f7, emissive:0x4fc3f7, emissiveIntensity:1.1, roughness:.4}));
+  btn.rotation.x=Math.PI/2; btn.position.y=1.0; g.add(btn);
+  const lead = new THREE.Mesh(new THREE.CylinderGeometry(.16,.16,2.2,8), std({color:0x15181f, roughness:.8}));
+  lead.position.set(2.0,-1.0,1.4); lead.rotation.z=.5; g.add(lead);
+  g.position.y = SP_Y0+SP_H+0.9;
+  reg('mic', g, {off:V(0,16,0), spin:V(0,.6,0), lab:V(0,2.2,0), side:1, labOn:true, labMob:true});
+}
+// --- physical mute switch ---------------------------------------------
+{
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.9,1.3,1.1), std({color:0x15181f, roughness:.6}));
+  g.add(body);
+  const rock = new THREE.Mesh(new THREE.BoxGeometry(1.5,.5,.9), std({color:0xd64a4a, emissive:0x9e1f1f, emissiveIntensity:.5, roughness:.4}));
+  rock.position.y=.72; rock.rotation.z=-.22; g.add(rock);
+  g.position.set(6.6, Y0+2.4, 4.0); g.rotation.y=-.5;
+  reg('mute', g, {off:V(15,-4,9), spin:V(0,-.6,.3), lab:V(1.6,.8,0), side:1, labOn:true});
+}
+
+// --- ground shadow + stage ring ---------------------------------------
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(64,64),
+  new THREE.MeshBasicMaterial({map:shadowTex(), transparent:true, depthWrite:false, opacity:.95}));
+ground.rotation.x = -Math.PI/2; ground.position.y = .02; scene.add(ground);
+const stageRing = new THREE.Mesh(new THREE.TorusGeometry(13.5,.07,6,80),
+  new THREE.MeshBasicMaterial({color:0xffb443, transparent:true, opacity:.22}));
+stageRing.rotation.x = Math.PI/2; stageRing.position.y = .04; scene.add(stageRing);
+
+// stagger index: reverse of assembly order, so disassembly peels the mic off first
+ASM.forEach((id,i)=>{ if(P[id]){ P[id].asm = i; P[id].stag = ASM.length-1-i; } });
+const NP = ASM.length;
+
+// ======================================================================
+// state
+// ======================================================================
+let E = 0, tw = null;              // explode 0..1 + tween
+let sel = null;                    // selected part id
+let demo = false, demoT = 0, demoIdx = 0, demoPhase = '';
+// --- totem-web: the chat lane drives the glow through the SAME contract ----
+// talk = {i, ph:'listening'|'thinking'|'speaking'|'dark', t, from, fromB}
+// (named `talk`, not `live`: updateGlow() already has a local `const live=[]`)
+let talk = null, faceTapCb = null;
+let stage = -1, stageMix = 0;      // build-step view
+let spinOn = true, lastAct = -99;
+let clk = 0;                       // glow clock (seconds)
+const B = [0,0,0,0,0,0];           // per-face brightness 0..1
+const GOLD = new THREE.Color(0xffb443);
+const ALL = Object.keys(P).map(k=>P[k]);
+
+// remember emissive defaults; mark glow-driven materials
+ALL.forEach(p=>p.mats.forEach(m=>{
+  m.userData.ec = m.emissive ? m.emissive.clone() : null;
+  m.userData.ei = (m.emissiveIntensity===undefined) ? 0 : m.emissiveIntensity;
+  // a black emissive still carries emissiveIntensity 1 — tinting it gold would multiply by that
+  m.userData.eBlack = !m.emissive || (m.emissive.r + m.emissive.g + m.emissive.b) < 0.02;
+}));
+RINGS.forEach(r=>{ r.pxMat.userData.glow=1; r.halo.material.userData.glow=1; r.halo.material.userData.o0=1; });
+PLATES.forEach(p=>{ p.mat.userData.glow=1; });
+
+const stageHas = id => stage>=0 && STEPS[stage].parts.indexOf(id)>=0;
+
+// ======================================================================
+// UI — group chips, steps, help
+// ======================================================================
+const gchips = $('#gchips');
+GROUPS.forEach(g=>{
+  const b=document.createElement('div');
+  b.className='gchip'; b.dataset.k=g.k;
+  b.innerHTML = g.em+' <span class="ge">'+g.en+'</span> <span style="opacity:.6">'+g.zh+'</span>';
+  b.onclick = ()=>{ gOn[g.k]=!gOn[g.k]; b.classList.toggle('off',!gOn[g.k]);
+    if(sel && P[sel] && !gOn[P[sel].group]) select(null); bom(); };
+  gchips.appendChild(b);
+});
+const stepList = $('#stepList');
+STEPS.forEach((s,i)=>{
+  const d=document.createElement('div');
+  d.className='step'; d.dataset.i=i;
+  d.innerHTML = '<div class="n">'+(i+1)+'</div><div class="t">'+s.t+' · '+s.zh+'<i>'+s.d+'</i></div>';
+  d.onclick = ()=>setStage(stage===i?-1:i);
+  stepList.appendChild(d);
+});
+$('#stepsHd').onclick = ()=>{ stepList.classList.toggle('hide');
+  $('#stepsHd').querySelector('em').textContent = stepList.classList.contains('hide') ? '调试顺序 ▸' : '调试顺序 ▾'; };
+$('#stepOff').onclick = ()=>setStage(-1);
+if(window.innerWidth<620) stepList.classList.add('hide'),
+  $('#stepsHd').querySelector('em').textContent='调试顺序 ▸';
+
+let helped=false;
+function dismissHelp(){ if(helped) return; helped=true; $('#help').classList.add('gone'); }
+$('#helpGo').onclick = dismissHelp;
+$('#bHelp').onclick = ()=>{ helped=false; $('#help').classList.remove('gone'); };
+canvas.addEventListener('pointerdown', dismissHelp, {passive:true});
+setTimeout(()=>{ if(!helped) dismissHelp(); }, 14000);
+
+// ======================================================================
+// explode control
+// ======================================================================
+const exEl = $('#ex'), exv = $('#exv');
+function setE(v, fromSlider){
+  E = clamp(v,0,1);
+  if(!fromSlider) exEl.value = Math.round(E*1000);
+  exv.textContent = Math.round(E*100)+'%';
+}
+function tweenRaw(to, ms){ tw = {a:E, b:to, t:0, d:ms/1000}; }
+function tween(to, ms){                       // user-driven: leaves build-step view
+  if(stage>=0) setStage(-1, true);
+  tweenRaw(to, ms);
+}
+exEl.addEventListener('input', ()=>{ tw=null; if(stage>=0) setStage(-1,true); setE(exEl.value/1000, true); exv.textContent=Math.round(E*100)+'%'; });
+$('#bAsm').onclick = ()=>tween(0, 2500);
+$('#bDis').onclick = ()=>tween(1, 2500);
+$('#bSpin').onclick = ()=>{ spinOn=!spinOn; controls.autoRotate=spinOn; $('#bSpin').classList.toggle('on',spinOn); };
+$('#bSpin').classList.add('on');
+$('#bDemo').onclick = ()=>{
+  demo=!demo; $('#bDemo').classList.toggle('on',demo); demoT=0; demoIdx=0; demoPhase='';
+  if(demo){ if(stage>=0) setStage(-1); tween(0,1400); select(null); } else cap(null);
+};
+
+// ======================================================================
+// build steps
+// ======================================================================
+function setStage(i, quiet){
+  if(stage===i) return;
+  stage = i;
+  [...stepList.children].forEach(c=>c.classList.toggle('on', +c.dataset.i===stage));
+  $('#stepOff').classList.toggle('on', stage>=0);
+  if(stage>=0){
+    demo=false; $('#bDemo').classList.remove('on');
+    select(null);
+    if(!quiet) tweenRaw(0, 900);
+    const s=STEPS[stage];
+    cap('🔧 Step '+(stage+1)+' · '+s.t, s.d, s.zh);
+    // every group a step touches must be visible or the step shows nothing
+    s.parts.forEach(id=>{ const g=P[id] && P[id].group; if(g && !gOn[g]){ gOn[g]=true;
+      [...gchips.children].forEach(c=>{ if(c.dataset.k===g) c.classList.remove('off'); }); } });
+    bom();
+  } else if(!quiet) cap(null);
+  if(stage!==0) rainbowOff();
+}
+let rainbow = false;
+function rainbowOff(){
+  if(!rainbow) return; rainbow=false;
+  const c=new THREE.Color();
+  RINGS.forEach(r=>{ for(let k=0;k<12;k++) r.px.setColorAt(k, c.setHex(r.face.col));
+    if(r.px.instanceColor) r.px.instanceColor.needsUpdate=true; });
+}
+function rainbowStep(){
+  rainbow = true;
+  const c = new THREE.Color();
+  RINGS.forEach((r,fi)=>{
+    for(let k=0;k<12;k++){
+      const idx = fi*12+k;                                  // 0..71, the real pixel map
+      const head = (clk*22) % 96;
+      const d = ((idx - head) + 96) % 96;
+      const lit = d < 14 ? 1 - d/14 : 0;
+      c.setHSL(((idx/72)*0.85+clk*0.08)%1, .95, .08+ .42*lit);
+      r.px.setColorAt(k, c);
+    }
+    if(r.px.instanceColor) r.px.instanceColor.needsUpdate=true;
+  });
+}
+
+// ======================================================================
+// caption
+// ======================================================================
+const capEl=$('#cap');
+function cap(who, what, ph, col){
+  if(!who){ capEl.classList.remove('on'); return; }
+  $('#capWho').textContent = who;
+  $('#capWho').style.color = col || '#fff';
+  $('#capWhat').textContent = what||'';
+  $('#capPh').textContent = ph||'';
+  capEl.classList.add('on');
+}
+
+// ======================================================================
+// selection
+// ======================================================================
+const iEm=$('#iEm'), iEn=$('#iEn'), iZh=$('#iZh'), iMeta=$('#iMeta'), iNote=$('#iNote'),
+      iZhNote=$('#iZhNote'), iPins=$('#iPins'), infoEl=$('#info');
+function yen(y){ return y ? (y[0]===y[1] ? '¥'+y[0] : '¥'+y[0]+'–'+y[1]) : 'included'; }
+function select(id){
+  sel = id && P[id] ? id : null;
+  if(!sel){ infoEl.classList.remove('on'); return; }
+  const p=P[sel], m=p.meta||{};
+  const G = GROUPS.find(g=>g.k===m.g) || {em:'',en:m.g,zh:''};
+  iEm.textContent = m.em||'🔧';
+  iEn.textContent = m.en||sel;
+  iZh.textContent = m.zh||'';
+  let meta = '<span class="chip">'+G.em+' '+G.en+' '+G.zh+'</span>'
+           + '<span class="chip y">'+yen(m.y)+'</span>'
+           + '<span class="chip">#'+sel+'</span>';
+  if(m.bom===0 && m.y) meta += '<span class="chip g">counted once</span>';
+  iMeta.innerHTML = meta;
+  iNote.textContent = m.note||'';
+  iZhNote.textContent = m.zhNote||'';
+  iPins.innerHTML = m.pin ? '📌 <b>'+m.pin+'</b>' : '';
+  iPins.style.display = m.pin ? 'block' : 'none';
+  const pn = sel.match(/^(face|ring|pad)(\d)$/);
+  infoEl.style.borderLeftColor = pn ? '#'+FACES[+pn[2]-1].col.toString(16).padStart(6,'0') : '#ffb443';
+  infoEl.classList.add('on');
+}
+$('#infoX').onclick = ()=>{ select(null); if(!demo && stage<0) cap(null); };
+
+const ray = new THREE.Raycaster(); ray.params.Points = {threshold:1};
+const ptr = new THREE.Vector2();
+let dnX=0, dnY=0, dnT=0;
+canvas.addEventListener('pointerdown', e=>{ dnX=e.clientX; dnY=e.clientY; dnT=performance.now(); });
+canvas.addEventListener('pointerup', e=>{
+  if(Math.hypot(e.clientX-dnX, e.clientY-dnY) > 9 || performance.now()-dnT > 600) return;
+  ptr.x = (e.clientX/window.innerWidth)*2-1;
+  ptr.y = -(e.clientY/window.innerHeight)*2+1;
+  ray.setFromCamera(ptr, camera);
+  const list = pickables.filter(o=>{ const p=P[o.userData.id]; return p && p.obj.visible && p.visT>0.45; });
+  const hit = ray.intersectObjects(list, false);
+  if(hit.length){
+    let id = hit[0].object.userData.id;
+    select(id===sel ? null : id);
+    const n = id.match(/\d$/);
+    if(n && /^(face|ring|pad)/.test(id)){
+      const f = FACES[+n[0]-1];
+      if(faceTapCb) faceTapCb(f.k);          // totem-web: tapping a face summons it
+      if(sel) cap(f.em+' '+f.nm, f.line, f.zhLine, '#'+f.col.toString(16).padStart(6,'0'));
+      else if(!demo && stage<0) cap(null);
+    } else if(!demo && stage<0) cap(null);
+  } else { select(null); if(!demo && stage<0) cap(null); }
+});
+
+// ======================================================================
+// BOM readout
+// ======================================================================
+const bomEl=$('#bom');
+function bom(){
+  let lo=0, hi=0, n=0;
+  Object.keys(META).forEach(id=>{
+    const m=META[id];
+    if(!m.bom || !m.y) return;
+    if(!gOn[m.g]) return;
+    lo+=m.y[0]; hi+=m.y[1]; n++;
+  });
+  const f=v=>v.toLocaleString('en-US');
+  bomEl.innerHTML = '🧾 visible parts <b>¥'+f(lo)+'–'+f(hi)+'</b> ('+n+' line items 项) · '
+    + 'lean ≈¥480–700 · full ≈¥950–1,400 · <a href="../shopping/">采购单 shopping list →</a>';
+}
+bom();
+
+// ======================================================================
+// labels + leader lines
+// ======================================================================
+const labBox=$('#labels'), svg=$('#leaders');
+const SVGNS='http://www.w3.org/2000/svg';
+const labParts = ALL.slice();
+labParts.forEach(p=>{
+  const d=document.createElement('div'); d.className='lbl';
+  const m=p.meta||{};
+  let en=m.en||p.id, zh=m.zh||'';
+  if(/^(face|ring|pad)6$/.test(p.id)){ // one label stands for the stack of six
+    en = ({face6:'Face plates ×6 (translucent)', ring6:'12-LED rings ×6 — 72 px total', pad6:'TTP223 touch pads ×6'})[p.id];
+    zh = ({face6:'半透明脸面板 ×6', ring6:'12位灯环 ×6 · 共72灯', pad6:'触摸模块 ×6'})[p.id];
+  }
+  d.innerHTML='<b>'+en+'</b><i>'+zh+(m.y?' · '+yen(m.y):'')+'</i>';
+  labBox.appendChild(d); p.el=d;
+  const ln=document.createElementNS(SVGNS,'line');
+  ln.setAttribute('stroke','rgba(255,180,67,.4)'); ln.setAttribute('stroke-width','1');
+  svg.appendChild(ln); p.ln=ln;
+});
+const tmpV=new THREE.Vector3(), tmpN=new THREE.Vector3(), tmpC=new THREE.Vector3();
+function facesAway(p){
+  if(!/^(face|ring|pad)\d$/.test(p.id)) return false;
+  tmpN.set(0,0,1).applyQuaternion(p.obj.getWorldQuaternion(new THREE.Quaternion()));
+  p.obj.getWorldPosition(tmpC).sub(camera.position);
+  return tmpN.dot(tmpC) > 0;
+}
+function updateLabels(){
+  const W=window.innerWidth, H=window.innerHeight, narrow = W<620;
+  const showAll = E>0.12 || stageMix>0.01;
+  const rows=[[],[]];
+  labParts.forEach(p=>{
+    const isSel = sel===p.id;
+    let on = p.obj.visible && p.visT>0.5 &&
+      (isSel || (showAll && !sel && p.labOn && (!narrow || p.labMob)));
+    if(on && !isSel && stage>=0 && !stageHas(p.id)) on = false;
+    if(on && !isSel && facesAway(p)) on = false;
+    if(!on){ p.el.classList.remove('on'); p.ln.setAttribute('stroke-opacity','0'); return; }
+    tmpV.copy(p.lab); p.obj.localToWorld(tmpV); tmpV.project(camera);
+    if(tmpV.z>1 || tmpV.x<-1.15 || tmpV.x>1.15){ p.el.classList.remove('on'); p.ln.setAttribute('stroke-opacity','0'); return; }
+    const sx=(tmpV.x*.5+.5)*W, sy=(-tmpV.y*.5+.5)*H;
+    const side = p.side<0?0:1;
+    rows[side].push({p,sx,sy});
+  });
+  // both columns point INWARD from behind the side panels, so nothing ever hides a label
+  const colL = narrow ? 10 : 282, colR = W - (narrow ? 10 : 282);
+  const top = narrow ? 74 : 92, bot = H - (narrow ? 182 : 152);
+  rows.forEach((arr,side)=>{
+    arr.sort((a,b)=>a.sy-b.sy);
+    // stagger by each chip's real height so two-line labels never touch
+    arr.forEach(it=>{ it.h = Math.max(22, it.p.el.offsetHeight) + 5; });
+    let prev=-1e9, prevH=0;
+    arr.forEach(it=>{
+      const y = Math.max(it.sy, prev + prevH/2 + it.h/2);
+      prev = y; prevH = it.h; it.y = y;
+    });
+    const over = prev + prevH/2 - bot;
+    if(over>0) arr.forEach(it=>it.y -= over);
+    prev = -1e9; prevH = 0;
+    arr.forEach(it=>{
+      it.y = Math.max(it.y, Math.max(top + it.h/2, prev + prevH/2 + it.h/2));
+      prev = it.y; prevH = it.h;
+    });
+    arr.forEach(it=>{
+      const el=it.p.el, x = side?colR:colL;
+      el.style.left=x+'px'; el.style.top=it.y+'px';
+      el.style.transform = side ? 'translate(-100%,-50%)' : 'translate(0,-50%)';
+      el.style.textAlign = side ? 'right' : 'left';
+      el.classList.add('on');
+      el.classList.toggle('sel', sel===it.p.id);
+      const w = el.offsetWidth + 5;
+      it.p.ln.setAttribute('x1', it.sx); it.p.ln.setAttribute('y1', it.sy);
+      it.p.ln.setAttribute('x2', side? x-w : x+w); it.p.ln.setAttribute('y2', it.y);
+      it.p.ln.setAttribute('stroke-opacity', sel===it.p.id?'.85':'.42');
+    });
+  });
+}
+
+// ======================================================================
+// glow: idle breathing wave / demo speech contract
+// ======================================================================
+function flick(t){ return Math.abs(Math.sin(t*9.3)*0.55 + Math.sin(t*21.7)*0.28 + Math.sin(t*3.1)*0.17); }
+function updateGlow(dt){
+  if(talk){
+    // one conversation, one contract: identical amplitudes to DEMO MODE below —
+    // idle 5%, listening 40% (fast pulse), speaking 70% with flicker, 300ms handoff.
+    const HO = 0.3;
+    talk.t += dt;
+    const i = talk.i, dark = talk.ph === 'dark';
+    for(let k=0;k<6;k++) B[k] = dark ? 0 : 0.05;
+    const tgt = talk.ph === 'speaking' ? 0.7 : 0.4;
+    if(dark){ /* power cut: every face goes out, including the speaker */ }
+    else if(talk.from >= 0 && talk.from !== i && talk.t < HO){
+      const u = talk.t / HO;
+      B[talk.from] = lerp(talk.fromB, 0.05, u);
+      B[i] = lerp(0.05, tgt, u);
+    }
+    else if(talk.ph === 'speaking'){ B[i] = 0.7*(0.78+0.22*flick(clk)); }
+    else if(talk.ph === 'thinking'){ B[i] = 0.4*(0.45+0.30*Math.sin(clk*4.5)); }
+    else { B[i] = 0.4*(0.55+0.45*Math.sin(clk*13)); }
+  } else if(demo){
+    const LIS=0.9, SPK=2.4, HO=0.3, CY=LIS+SPK+HO;
+    demoT+=dt;
+    if(demoT>CY){ demoT-=CY; demoIdx=(demoIdx+1)%6; }
+    for(let k=0;k<6;k++) B[k]=0.05;
+    const i=demoIdx, nx=(i+1)%6, f=FACES[i], col='#'+f.col.toString(16).padStart(6,'0');
+    if(demoT<LIS){
+      B[i]=0.4*(0.55+0.45*Math.sin(clk*13));
+      if(demoPhase!=='l'+i){ demoPhase='l'+i; cap(f.em+' '+f.nm+' — listening', 'wake word heard · pad '+f.gpio+' armed · 麦克风已唤醒', 'LISTENING 40%', col); }
+    } else if(demoT<LIS+SPK){
+      B[i]=0.7*(0.78+0.22*flick(clk));
+      if(demoPhase!=='s'+i){ demoPhase='s'+i; cap(f.em+' '+f.nm+' — speaking', f.line, f.zhLine, col); }
+    } else {
+      const u=(demoT-LIS-SPK)/HO;
+      B[i]=lerp(0.7,0.05,u); B[nx]=lerp(0.05,0.4,u);
+      if(demoPhase!=='h'+i){ demoPhase='h'+i; cap('→ '+FACES[nx].em+' '+FACES[nx].nm, '300ms crossfade handoff · 交接淡入淡出', 'HANDOFF', '#ffb443'); }
+    }
+  } else if(rainbow){
+    for(let k=0;k<6;k++) B[k]=0.26;
+  } else {
+    const T=8, ph=((clk%T)/T)*6;
+    for(let i=0;i<6;i++){
+      let d=ph-i; if(d<-3) d+=6; if(d>3) d-=6;
+      const b = Math.abs(d)<1 ? 0.5*(1+Math.cos(Math.PI*d)) : 0;
+      B[i] = 0.035 + 0.15*b;
+    }
+  }
+  // selected face lights up so a tap feels like a summon
+  const DARK = !!(talk && talk.ph === 'dark');   // totem-web: power cut wins
+  const sn = sel && sel.match(/^(face|ring|pad)(\d)$/);
+  if(sn && !DARK) B[+sn[2]-1] = Math.max(B[+sn[2]-1], 0.42+0.1*Math.sin(clk*6));
+  if(stage>=0 && !DARK) for(let i=0;i<6;i++) if(stageHas('ring'+(i+1))) B[i]=Math.max(B[i], 0.22+0.12*Math.sin(clk*3-i));
+
+  // apply
+  const live=[];
+  RINGS.forEach((r,i)=>{
+    const b=B[i], vb=Math.pow(clamp(b,0,1),0.62), a=r.visT*r.dimT;
+    r.pxMat.emissiveIntensity = 0.12 + vb*4.2;
+    r.pxMat.opacity = a;
+    const ho = clamp(vb*1.2,0,1)*a*(rainbow?0.45:1);
+    r.halo.material.opacity = ho;
+    r.halo.visible = ho > 0.02;                 // big additive quads: don't rasterise dead ones
+    const s = 10+vb*15; r.halo.scale.set(s,s,1);
+    if(PLATES[i]){
+      PLATES[i].mat.emissiveIntensity = 0.1 + vb*2.0;
+      PLATES[i].mat.opacity = PLATES[i].mat.userData.o0 * PLATES[i].visT * PLATES[i].dimT;
+    }
+    live.push({i,b:b*a});
+  });
+  live.sort((a,b)=>b.b-a.b);
+  pl.forEach((l,k)=>{
+    const d=live[k];
+    if(!d || d.b<0.04){ l.intensity=0; return; }
+    const r=RINGS[d.i];
+    r.obj.getWorldPosition(l.position);
+    const dir = V(Math.sin(YAW[d.i]),0,Math.cos(YAW[d.i])).multiplyScalar(3.2);
+    l.position.add(dir);
+    l.color.setHex(FACES[d.i].col);
+    l.intensity = Math.pow(d.b,0.6)*30;
+    l.distance = 48;
+  });
+}
+
+// ======================================================================
+// per-frame part transforms + opacity
+// ======================================================================
+const GAP = 0.52/(NP-1), SPAN = 0.48;
+function updateParts(dt){
+  const k = 1-Math.exp(-7*dt);
+  const kStage = 1-Math.exp(-4.5*dt);
+  stageMix += ((stage>=0?1:0) - stageMix)*kStage;
+  ALL.forEach(p=>{
+    // ---- explode amount
+    let t = smoother((E - p.stag*GAP)/SPAN);
+    if(stageMix>0.001) t = lerp(t, stageHas(p.id)?0:1, stageMix);
+    p.obj.position.copy(p.home).addScaledVector(p.off, t)
+         .addScaledVector(p.arc, Math.sin(Math.PI*t));
+    p.obj.rotation.set(p.rot0.x+p.spin.x*t, p.rot0.y+p.spin.y*t, p.rot0.z+p.spin.z*t);
+    // ---- opacity targets
+    const vTar = gOn[p.group] ? 1 : 0;
+    let dTar = 1;
+    if(sel) dTar = (sel===p.id) ? 1 : 0.16;
+    else if(stage>=0) dTar = stageHas(p.id) ? 1 : 0.12;
+    p.visT += (vTar-p.visT)*k;
+    p.dimT += (dTar-p.dimT)*k;
+    const pTar = (sel===p.id || (stage>=0 && stageHas(p.id))) ? 1 : 0;
+    p.pulse += (pTar-p.pulse)*k;
+    const a = p.visT*p.dimT;
+    p.obj.visible = a>0.02;
+    const pul = p.pulse>0.02 ? (0.5+0.5*Math.sin(clk*5)) : 0;
+    p.mats.forEach(m=>{
+      if(!m.userData.glow) m.opacity = m.userData.o0 * a;
+      if(m.userData.ec && !m.userData.glow){
+        if(pul>0){
+          m.emissive.copy(m.userData.ec).lerp(GOLD, 0.7*p.pulse);
+          const base = m.userData.eBlack ? 0 : m.userData.ei;
+          m.emissiveIntensity = base + (0.10+0.22*pul)*p.pulse;
+        }
+        else { m.emissive.copy(m.userData.ec); m.emissiveIntensity = m.userData.ei; }
+      }
+    });
+  });
+  // the model shrinks as it blows apart so it stays in frame (scaled about the orbit target)
+  const portrait = camera.aspect < 1;
+  const spread = Math.max(E, stageMix*0.75);
+  const s = 1/(1 + spread*(portrait?0.62:0.46));
+  root.scale.setScalar(s);
+  root.position.y = (1-s)*controls.target.y;
+  ground.material.opacity = 0.95*(1-E*0.75);
+  stageRing.material.opacity = 0.22*(1-E*0.8);
+}
+
+// ======================================================================
+// resize / framing
+// ======================================================================
+let wasPortrait=null;
+function resize(){
+  const w=window.innerWidth, h=window.innerHeight;
+  renderer.setSize(w,h,false);
+  camera.aspect = w/h;
+  camera.fov = (w/h < 0.8) ? 50 : 42;
+  camera.updateProjectionMatrix();
+  svg.setAttribute('viewBox','0 0 '+w+' '+h);
+  svg.setAttribute('width',w); svg.setAttribute('height',h);
+  syncDock();
+  const portrait = w/h < 1;
+  if(wasPortrait===null || portrait!==wasPortrait){ wasPortrait=portrait; frame(); }
+}
+const dockEl = $('#dock');
+function syncDock(){
+  document.documentElement.style.setProperty('--dockh', dockEl.offsetHeight+'px');
+}
+new ResizeObserver(syncDock).observe(dockEl); syncDock();
+
+function frame(){
+  // the model is ~48 tall; fit it into the band of screen the UI leaves free,
+  // and aim the camera at that band's centre instead of the raw viewport centre
+  const h = window.innerHeight;
+  const narrow = window.innerWidth < 620;
+  const topC = narrow ? 80 : 72;
+  const botC = dockEl.offsetHeight + (narrow ? $('#stepsHd').offsetHeight + 14 : 10);
+  const band = Math.max(h*0.42, h - topC - botC);
+  const fit = 53 * h / band;
+  const d = (fit/2)/Math.tan(camera.fov*Math.PI/360);
+  const worldPerPx = fit/h;
+  const dy = ((topC + (h-botC))/2 - h/2) * worldPerPx;
+  controls.target.set(0, 23.5 + dy, 0);
+  const dir = V(0.40, 0.19, 0.89).normalize().multiplyScalar(d);
+  camera.position.copy(controls.target).add(dir);
+  controls.update();
+}
+window.addEventListener('resize', resize);
+resize();
+
+controls.addEventListener('start', ()=>{ controls.autoRotate=false; });
+controls.addEventListener('end', ()=>{ lastAct=clk; });
+
+// ======================================================================
+// runtime quality step-down — measured on the device actually running this.
+// (this container renders on SwiftShader/CPU, so it degrades itself; real GPUs keep the glass)
+// ======================================================================
+const QFORCE = new URLSearchParams(location.search).get('q');   // ?q=high / ?q=low to pin it
+let qDone = (QFORCE==='high'), qFrames = 0, qTime = 0;
+function stepDown(why){
+  PLATES.forEach(p=>{ p.mat.transmission = 0; p.mat.thickness = 0; p.mat.opacity = 0.9; p.mat.needsUpdate = true; });
+  renderer.setPixelRatio(Math.max(1, Math.min(window.devicePixelRatio||1, 2)*0.5));
+  pl[1].visible = false;
+  console.info('[ohana-bot] quality step-down:', why);
+}
+if(QFORCE==='low') stepDown('forced by ?q=low');
+
+// ======================================================================
+// loop
+// ======================================================================
+let prev = performance.now();
+function loop(now){
+  requestAnimationFrame(loop);
+  let dt = (now-prev)/1000; prev=now;
+  if(dt>0.1) dt=0.1;
+  clk += dt;
+  if(tw){
+    tw.t += dt/tw.d;
+    if(tw.t>=1){ setE(tw.b); tw=null; } else setE(lerp(tw.a, tw.b, smooth(tw.t)));
+  }
+  if(!qDone){
+    qFrames++; qTime += dt;
+    if(qTime > 2.4){
+      qDone = true;
+      const fps = qFrames/qTime;
+      if(fps < 25) stepDown(fps.toFixed(1)+'fps over first '+qTime.toFixed(1)+'s');
+    }
+  }
+  if(spinOn && !controls.autoRotate && clk-lastAct>4) controls.autoRotate=true;
+  if(stage===0) rainbowStep(); else if(rainbow) rainbowOff();
+  updateParts(dt);
+  updateGlow(dt);
+  controls.update();
+  renderer.render(scene, camera);
+  updateLabels();
+}
+requestAnimationFrame(loop);
+
+// first impression: breathe for a moment, then fall together
+setE(1);
+setTimeout(()=>tween(0, 3000), 700);
+
+// ---- debug hook (read-only; used by the build's own verification pass) -----
+window.__ob = {
+  get sel(){ return sel; }, get E(){ return E; }, get stage(){ return stage; },
+  get demo(){ return demo; }, get B(){ return B.slice(); },
+  parts:P, renderer, scene, camera, root,
+  screenOf(id){
+    const p=P[id]; if(!p) return null;
+    const v=new THREE.Vector3(); p.obj.getWorldPosition(v); v.project(camera);
+    return {x:(v.x*.5+.5)*window.innerWidth, y:(-v.y*.5+.5)*window.innerHeight, z:v.z, visible:p.obj.visible};
+  },
+  info(){ return {en:$('#iEn').textContent, zh:$('#iZh').textContent, open:infoEl.classList.contains('on')}; },
+  calls(){ return renderer.info.render; }
+};
+
+
+// ======================================================================
+// totem-web control surface — the chat lane's only way into the body.
+// (A4 patch, applied by ohana-totem/src/build-page.py)
+// ======================================================================
+const hex6 = n => '#'+n.toString(16).padStart(6,'0');
+function faceIdx(k){ for(let i=0;i<FACES.length;i++) if(FACES[i].k===k) return i; return -1; }
+window.OhanaTotem = {
+  faces: FACES.map((f,i)=>({k:f.k, i, nm:f.nm, em:f.em, zh:f.zh, job:f.job, zhJob:f.zhJob,
+                            line:f.line, zhLine:f.zhLine, col:hex6(f.col), gpio:f.gpio, px:f.px})),
+  summon(k, ph){
+    const i = faceIdx(k); if(i<0) return -1;
+    if(demo){ demo=false; $('#bDemo').classList.remove('on'); demoPhase=''; }
+    if(stage>=0) setStage(-1);
+    const from = talk ? talk.i : -1, fromB = talk ? B[talk.i] : 0.05;
+    talk = {i, ph: ph||'listening', t:0, from, fromB};
+    return i;
+  },
+  phase(ph){
+    if(!talk) return;
+    if(talk.ph === ph) return;
+    talk.ph = ph; talk.t = 0; talk.from = -1;
+  },
+  dark(on){
+    if(on){ if(!talk) this.summon(FACES[FACES.length-1].k, 'dark'); else { talk.ph='dark'; talk.t=0; talk.from=-1; } }
+    else if(talk){ talk.ph='listening'; talk.t=0; }
+  },
+  release(){ talk = null; cap(null); },
+  caption(who, what, ph, col){ cap(who, what, ph, col); },
+  onFaceTap(fn){ faceTapCb = fn; },
+  assemble(ms){ tween(0, ms||1800); },
+  get state(){ return talk ? {face: FACES[talk.i].k, phase: talk.ph, B: B.slice()} : null; }
+};

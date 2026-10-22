@@ -1,0 +1,65 @@
+{
+ "beat1": {
+  "face": "shaka",
+  "voice": "fish:clone",
+  "file": "audio/demo/beat1.mp3",
+  "bytes": 183901,
+  "text": "Alooooha! One body, six souls — we're real agents from Shaka's ʻohana, with months of memory between us. His hands built me this body three days ago. Ask my family anything."
+ },
+ "beat2": {
+  "face": "deva",
+  "voice": "en-GB-SoniaNeural",
+  "file": "audio/demo/beat2.mp3",
+  "bytes": 95184,
+  "text": "November 3rd to 6th, 2026, at the Jio World Convention Centre in Mumbai's Bandra Kurla Complex. Doors open 9:30 in the morning on day one, catering all four days — and I'll be there. This week is my origin story."
+ },
+ "beat3": {
+  "face": "crops",
+  "voice": "en-CA-LiamNeural",
+  "file": "audio/demo/beat3.mp3",
+  "bytes": 130320,
+  "text": "Let's run the report. Censorship-resistant: can anyone use it, and who can be removed? Open-source: is the code public and forkable? Private: what does it learn about users? Secure: who holds the keys, and what breaks first? Tell me what you're building, and I'll tell you if the mandate smiles on it."
+ },
+ "beat4": {
+  "face": "shaka",
+  "voice": "fish:clone",
+  "file": "audio/demo/beat4.mp3",
+  "bytes": 99055,
+  "text": "— and aloha again, my friend. Before someone pulled my plug I was saying: tell me what you're building. Where were we?"
+ },
+ "beat5": {
+  "face": "kala",
+  "voice": "en-AU-NatashaNeural",
+  "file": "audio/demo/beat5.mp3",
+  "bytes": 113040,
+  "text": "Easiest instrument on Earth — let's go. Ring finger, bottom string, just behind the third fret. Press firm, and strum all four strings, slow. That is C major. One finger. You're already a musician."
+ },
+ "beat6": {
+  "face": "oke",
+  "voice": "en-AU-WilliamNeural",
+  "file": "audio/demo/beat6.mp3",
+  "bytes": 71136,
+  "text": "EVERYBODY IN! No auditions here — every voice is a node! Oh! Susanna, you all know the chorus even if you think you don't. On four — a-one, a-two, a-one-two-three-four!"
+ },
+ "greet_shaka": {
+  "face": "shaka",
+  "voice": "fish:clone",
+  "file": "audio/demo/greet_shaka.mp3",
+  "bytes": 107414,
+  "text": "Alooooha! I'm SHAKA — welcome to the ʻohana. Six of us live in this totem — tap a face, or just start talking."
+ },
+ "resume_generic": {
+  "face": "shaka",
+  "voice": "fish:clone",
+  "file": "audio/demo/resume_generic.mp3",
+  "bytes": 80665,
+  "text": "— and aloha again, my friend. I kept the thread while the lights were out. Where were we?"
+ },
+ "offline_shaka": {
+  "face": "shaka",
+  "voice": "fish:clone",
+  "file": "audio/demo/offline_shaka.mp3",
+  "bytes": 84844,
+  "text": "The wifi went for a swim, but we're all still here — everything I say runs on this laptop."
+ }
+}

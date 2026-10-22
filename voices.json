@@ -1,0 +1,11 @@
+{
+ "shaka": "fish:clone",
+ "shaka_zh": "fish:clone",
+ "shaka_fallback": "en-US-AndrewNeural",
+ "shaka_zh_fallback": "zh-CN-YunxiNeural",
+ "oso": "en-US-BrianNeural",
+ "deva": "en-GB-SoniaNeural",
+ "crops": "en-CA-LiamNeural",
+ "kala": "en-AU-NatashaNeural",
+ "oke": "en-AU-WilliamNeural"
+}

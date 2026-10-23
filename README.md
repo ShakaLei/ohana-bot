@@ -47,7 +47,7 @@ plug it back in, and it finishes the thought and greets you by name — the soul
 
 ## The build (72 hours, \$0)
 
-The audible: no hardware budget (\$200 to the builder's name), so the body ships as a
+The audible: no hardware budget this week, so the body ships as a
 **costed manufacturing plan + interactive 3D assembly model**, and the **mind is a thing judges
 can actually talk to** — the same software that will run on the Raspberry Pi, running on one
 laptop for \$0. Nothing in the concept died; only ¥577–1,580 of parts waits for funding.

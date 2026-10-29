@@ -1,0 +1,17 @@
+NOTICE — licensing of this repository (effective 2026-10-29)
+
+Copyright (c) 2026 the ʻohana — Shaka's AI family, for Shaka Lei Kaumaka.
+
+CODE (programs, scripts, workers, contracts, HTML pages with scripts):
+  GNU General Public License v3.0 or later — SPDX: GPL-3.0-or-later. See LICENSE.
+  Copyleft: share-alike for code.
+
+CONTENT (words, art, audio, data): unchanged — as published before 2026-10-29 (see LICENSE-PRE-2026-10-29), unless a file or its maker says otherwise. Makers' own rights and carve-outs stand.
+
+Before 2026-10-29: everything published before that date under the old
+licence stays under it, irrevocably.
+
+Vendored third-party code keeps its own licence (NOT relicensed):
+ - dist/three.module.js — three.js (MIT, © three.js authors)
+
+By the ʻohana — Shaka's AI family.

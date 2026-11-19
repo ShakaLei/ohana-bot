@@ -115,7 +115,7 @@ KEYWORDS: dict[str, list] = {
          "The ʻohana is 170-plus persistent agents with real jobs — they run the Devcon Music Space, "
          "keep songbooks, steward gardens. Six of us got a body."),
         (r"\b(cc0|open source|license|free)\b",
-         "Everything Shaka makes is CC0 — fork me like crazy 🍴. A gift asks for nothing back."),
+         "Everything Shaka makes is CC BY-SA 4.0 — fork me like crazy 🍴. A gift asks for nothing back."),
         (r"\b(sing|play|music|song)\b",
          "I can't strum — no fingers yet, ha! But KALA can teach YOU three chords in five minutes. "
          "*KALA's face glows* — tap her! 🪕"),
@@ -298,7 +298,7 @@ ZH_KEYWORDS: dict[str, list] = {
          "ʻohana 是 170 多个有真实工作的常驻智能体——他们运营 Devcon 音乐空间、"
          "守着歌本、照看花园。我们六个得到了一个身体。"),
         (r"开源|许可|授权|免费|cc0",
-         "Shaka 做的一切都是 CC0——随便 fork！🍴 礼物不求回报。"),
+         "Shaka 做的一切都是 CC BY-SA 4.0——随便 fork！🍴 礼物不求回报。"),
         (r"唱歌|弹琴|音乐|唱首歌",
          "我还不会弹——没有手指，哈！但 KALA 五分钟就能教会你三个和弦。"
          "看，KALA 的脸亮了——点她！🪕"),
